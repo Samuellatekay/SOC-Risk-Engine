@@ -6,7 +6,8 @@ from .models import RiskStrategy
 
 class Settings(BaseSettings):
     risk_strategy: RiskStrategy = "linear"
-    risk_environment_multiplier: float = Field(1.0, ge=0, allow_inf_nan=False)
+    risk_external_multiplier: float = Field(1.0, ge=1, allow_inf_nan=False)
+    risk_internal_multiplier: float = Field(1.0, ge=1, allow_inf_nan=False)
     host: str = "0.0.0.0"
     port: int = 8000
     workers: int = 2

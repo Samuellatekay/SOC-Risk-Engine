@@ -17,7 +17,10 @@ def health_check():
     return {
         "status": "healthy",
         "strategy": settings.risk_strategy,
-        "environment_multiplier": settings.risk_environment_multiplier,
+        "environment_multipliers": {
+            "external": settings.risk_external_multiplier,
+            "internal": settings.risk_internal_multiplier,
+        },
     }
 
 

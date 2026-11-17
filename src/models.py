@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 BusinessValue = Literal["core", "support", "test"]
 DataSensitivity = Literal["top_secret", "confidential", "internal", "public"]
+AttackSurfaceExposure = Literal["internet", "dmz", "internal", "isolated"]
 EventCategory = Literal[
     "malware",
     "intrusion_detection",
@@ -15,6 +16,12 @@ EventCategory = Literal[
     "security",
     "configuration",
 ]
+VulnerabilityExistence = Literal["existing", "possible", "none"]
+Exploitability = Literal["public_exploit", "vulnerability_only", "none"]
+PathReachability = Literal["direct", "hop", "isolated", "unknown"]
+LateralMovementPotential = Literal[
+    "jump_server", "key_segment", "endpoint", "unknown"
+]
 RiskStrategy = Literal["linear", "ahp_2026"]
 
 
@@ -22,12 +29,19 @@ class AssetContext(BaseModel):
     criticality: float = Field(3.0, ge=1, le=5, allow_inf_nan=False)
     business_value: BusinessValue = "support"
     data_sensitivity: DataSensitivity = "internal"
+    attack_surface_exposure: AttackSurfaceExposure = "internal"
 
 
 class EventContext(BaseModel):
     severity: float = Field(1.0, ge=1, le=5, allow_inf_nan=False)
     outcome: int = Field(1, ge=0, le=1)  # 0=blocked, 1=success/alert
     category: EventCategory = "network"
+    phase_hazard: Optional[float] = Field(
+        default=None, ge=0, le=1, allow_inf_nan=False
+    )
+    stage_policy_weight: Optional[float] = Field(
+        default=None, ge=0, le=1, allow_inf_nan=False
+    )
 
 
 class ThreatContext(BaseModel):
@@ -38,11 +52,26 @@ class ThreatContext(BaseModel):
     )
     domain_age_days: Optional[int] = Field(default=None, ge=0)
     repeat_count: int = Field(default=0, ge=0)
+    ioc_confidence: Optional[float] = Field(
+        default=None, ge=0, le=1, allow_inf_nan=False
+    )
+    vulnerability_existence: VulnerabilityExistence = "none"
+    apt_association: float = Field(0.0, ge=0, le=1, allow_inf_nan=False)
+    intelligence_freshness: float = Field(0.0, ge=0, le=1, allow_inf_nan=False)
+    exploitability: Exploitability = "none"
+    path_reachability: PathReachability = "unknown"
+    protection_bypass_evidence: bool = False
+    kill_chain_progression: bool = False
+    lateral_movement_potential: LateralMovementPotential = "unknown"
 
 
 class EnvironmentContext(BaseModel):
-    external_multiplier: float = Field(1.0, ge=0, allow_inf_nan=False)
-    internal_multiplier: float = Field(1.0, ge=0, allow_inf_nan=False)
+    external_multiplier: Optional[float] = Field(
+        default=None, ge=1, allow_inf_nan=False
+    )
+    internal_multiplier: Optional[float] = Field(
+        default=None, ge=1, allow_inf_nan=False
+    )
 
 
 class RiskInput(BaseModel):
