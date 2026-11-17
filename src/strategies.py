@@ -29,6 +29,7 @@ AHP_WEIGHTS = {
 }
 
 def get_risk_level(score: float) -> str:
+    """Classify the final 0-100 score: <40 low, <60 medium, <80 high, otherwise critical."""
     if score >= 80:
         return "critical"
     if score >= 60:
@@ -39,6 +40,7 @@ def get_risk_level(score: float) -> str:
 
 
 def build_risk_result(score: float, breakdown: dict[str, float]) -> RiskResult:
+    """Apply the global environment multiplier, cap at 100, then classify the final score."""
     multiplier = settings.risk_environment_multiplier
     final_score = round(max(0, min(100, score * multiplier)), 2)
     return RiskResult(
@@ -64,6 +66,7 @@ def calculate_linear(data: RiskInput) -> RiskResult:
 
 # --- STRATEGY 2: AHP 2026 ---
 def calculate_ahp_2026(data: RiskInput) -> RiskResult:
+    """Calculate the weighted AHP score; the global multiplier is applied afterward."""
     # 1. Target Criticality
     c_target = (
         BUSINESS_VALUE_SCORES[data.asset.business_value]
