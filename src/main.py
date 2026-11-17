@@ -1,7 +1,8 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from .config import settings
-from .models import RiskInput, RiskResult
+from .models import RiskInput, RiskResult, RiskStrategy
 from .strategies import calculate_linear, calculate_ahp_2026
+
 
 app = FastAPI(title="SOC Risk Score Engine", version="1.0.0")
 
@@ -10,22 +11,17 @@ STRATEGIES = {
     "ahp_2026": calculate_ahp_2026,
 }
 
+
 @app.get("/health")
 def health_check():
-    return {"status": "healthy", "strategy": settings.risk_strategy}
+    return {
+        "status": "healthy",
+        "strategy": settings.risk_strategy,
+        "environment_multiplier": settings.risk_environment_multiplier,
+    }
+
 
 @app.post("/calculate", response_model=RiskResult)
 def calculate_risk(payload: RiskInput):
-    strategy_name = payload.strategy or settings.risk_strategy
-    strategy_fn = STRATEGIES.get(strategy_name)
-    
-    if not strategy_fn:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Strategi '{strategy_name}' tidak didukung."
-        )
-    
-    try:
-        return strategy_fn(payload)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    strategy_name: RiskStrategy = payload.strategy or settings.risk_strategy
+    return STRATEGIES[strategy_name](payload)

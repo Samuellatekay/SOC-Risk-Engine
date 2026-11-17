@@ -1,0 +1,82 @@
+import unittest
+from unittest.mock import patch
+
+from pydantic import ValidationError
+
+from src.config import settings
+from src.main import calculate_risk
+from src.models import RiskInput
+from src.strategies import calculate_ahp_2026
+
+
+class RiskCalculationTests(unittest.TestCase):
+    def test_configured_strategy_is_used_when_request_omits_strategy(self):
+        payload = RiskInput()
+
+        with patch.object(settings, "risk_strategy", "ahp_2026"):
+            result = calculate_risk(payload)
+
+        self.assertEqual(result.breakdown["stage"], 0.5)
+
+    def test_request_strategy_overrides_configured_strategy(self):
+        payload = RiskInput(strategy="linear")
+
+        with patch.object(settings, "risk_strategy", "ahp_2026"):
+            result = calculate_risk(payload)
+
+        self.assertIn("raw", result.breakdown)
+        self.assertEqual(result.breakdown["global_multiplier"], 1.0)
+
+    def test_environment_multiplier_scales_final_score_and_level(self):
+        payload = RiskInput(strategy="ahp_2026")
+
+        with patch.object(settings, "risk_environment_multiplier", 1.2):
+            result = calculate_ahp_2026(payload)
+
+        self.assertEqual(result.score, 62.76)
+        self.assertEqual(result.level, "high")
+        self.assertEqual(result.breakdown["global_multiplier"], 1.2)
+
+    def test_environment_multiplier_caps_final_score_at_100(self):
+        payload = RiskInput(
+            asset={"business_value": "core", "data_sensitivity": "top_secret"},
+            event={"category": "malware"},
+            threat={"ioc_match": True, "reputation_score": 100, "repeat_count": 50},
+            environment={"external_multiplier": 1.2, "internal_multiplier": 1.2},
+        )
+
+        with patch.object(settings, "risk_environment_multiplier", 10.0):
+            result = calculate_ahp_2026(payload)
+
+        self.assertEqual(result.score, 100)
+
+    def test_zero_day_domain_is_treated_as_new_domain(self):
+        payload = RiskInput.model_validate(
+            {"threat": {"domain_age_days": 0}, "strategy": "ahp_2026"}
+        )
+
+        result = calculate_ahp_2026(payload)
+
+        self.assertEqual(result.breakdown["feas"], 0.3)
+
+    def test_accepts_categories_emitted_by_log_analyzer(self):
+        for category in ("security", "configuration"):
+            with self.subTest(category=category):
+                payload = RiskInput.model_validate(
+                    {"event": {"category": category}, "strategy": "ahp_2026"}
+                )
+
+                result = calculate_ahp_2026(payload)
+
+                self.assertEqual(result.breakdown["stage"], 0.5)
+
+    def test_rejects_out_of_range_risk_inputs(self):
+        with self.assertRaises(ValidationError):
+            RiskInput.model_validate({"threat": {"reputation_score": 101}})
+
+        with self.assertRaises(ValidationError):
+            RiskInput.model_validate({"event": {"category": "unknown"}})
+
+
+if __name__ == "__main__":
+    unittest.main()
