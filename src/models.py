@@ -1,4 +1,4 @@
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -79,10 +79,29 @@ class RiskInput(BaseModel):
     event: EventContext = Field(default_factory=EventContext)
     threat: ThreatContext = Field(default_factory=ThreatContext)
     environment: EnvironmentContext = Field(default_factory=EnvironmentContext)
+    graph: Optional[dict[str, Any]] = None
     strategy: Optional[RiskStrategy] = None
+
+
+class GraphValidationResult(BaseModel):
+    status: Literal["not_provided", "valid", "partial", "invalid"] = "not_provided"
+    gate_decision: Literal["retain", "fallback"] = "fallback"
+    snapshot_id: Optional[str] = None
+    validated_nodes: int = 0
+    validated_edges: int = 0
+    quarantined_facts: int = 0
+    confirmed_ioc: bool = False
+    ioc_confidence: Optional[float] = Field(default=None, ge=0, le=1, allow_inf_nan=False)
+    exploitable_vulnerability: bool = False
+    apt_association: bool = False
+    attack_stage_evidence: bool = False
+    kill_chain_progression: bool = False
+    evidence: list[str] = Field(default_factory=list)
+    violations: list[str] = Field(default_factory=list)
 
 
 class RiskResult(BaseModel):
     score: float
     level: str  # low, medium, high, critical
     breakdown: dict[str, float]
+    graph_validation: GraphValidationResult = Field(default_factory=GraphValidationResult)
