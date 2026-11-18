@@ -14,5 +14,5 @@ COPY src/ ./src/
 
 EXPOSE 8000
 
-# Jalankan dengan Uvicorn
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# Jalankan dengan Uvicorn (HOST/PORT/WORKERS dapat diatur lewat environment)
+CMD ["sh", "-c", "uvicorn src.main:app --host ${HOST:-0.0.0.0} --port ${PORT:-8000} --workers ${WORKERS:-2}"]

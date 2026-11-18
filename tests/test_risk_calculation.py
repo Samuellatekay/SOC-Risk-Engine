@@ -79,6 +79,41 @@ class RiskCalculationTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             RiskInput.model_validate({"event": {"category": "unknown"}})
 
+    def test_ahp_env_factor_is_clamped_to_one(self):
+        payload = RiskInput(
+            environment={"external_multiplier": 2.0, "internal_multiplier": 2.0},
+            strategy="ahp_2026",
+        )
+
+        result = calculate_ahp_2026(payload)
+
+        self.assertEqual(result.breakdown["env"], 1.0)
+
+    def test_linear_breakdown_is_normalized(self):
+        payload = RiskInput(
+            asset={"criticality": 5},
+            event={"severity": 5, "outcome": 1},
+            threat={"base_weight": 5},
+            strategy="linear",
+        )
+
+        result = calculate_risk(payload)
+
+        self.assertEqual(result.breakdown["asset"], 1.0)
+        self.assertEqual(result.breakdown["severity"], 1.0)
+        self.assertEqual(result.breakdown["outcome"], 1.0)
+        self.assertEqual(result.breakdown["threat"], 1.0)
+
+    def test_risk_level_boundaries(self):
+        from src.strategies import get_risk_level
+
+        self.assertEqual(get_risk_level(39.99), "low")
+        self.assertEqual(get_risk_level(40.0), "medium")
+        self.assertEqual(get_risk_level(59.99), "medium")
+        self.assertEqual(get_risk_level(60.0), "high")
+        self.assertEqual(get_risk_level(79.99), "high")
+        self.assertEqual(get_risk_level(80.0), "critical")
+
 
 if __name__ == "__main__":
     unittest.main()

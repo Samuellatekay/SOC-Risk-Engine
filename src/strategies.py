@@ -69,7 +69,16 @@ def calculate_linear(data: RiskInput) -> RiskResult:
           (data.threat.base_weight * W_T)
 
     score = round(raw * scale, 2)
-    return build_risk_result(score, {"raw": raw})
+    return build_risk_result(
+        score,
+        {
+            "asset": round(data.asset.criticality / 5, 3),
+            "severity": round(data.event.severity / 5, 3),
+            "outcome": float(data.event.outcome),
+            "threat": round(data.threat.base_weight / 5, 3),
+            "raw": raw,
+        },
+    )
 
 # --- STRATEGY 2: AHP 2026 ---
 def calculate_ahp_2026(data: RiskInput) -> RiskResult:
@@ -113,10 +122,17 @@ def calculate_ahp_2026(data: RiskInput) -> RiskResult:
     c_persist = min(1.0, data.threat.repeat_count / 50.0)
 
     # 6. Environment (per-request context; see build_risk_result note above)
-    c_env = (
-        data.environment.external_multiplier +
-        data.environment.internal_multiplier
-    ) / 2
+    c_env = min(
+        1.0,
+        max(
+            0.0,
+            (
+                data.environment.external_multiplier
+                + data.environment.internal_multiplier
+            )
+            / 2,
+        ),
+    )
 
     weights = AHP_WEIGHTS
     rb = 100 * (
