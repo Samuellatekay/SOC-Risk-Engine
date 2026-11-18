@@ -40,7 +40,14 @@ def get_risk_level(score: float) -> str:
 
 
 def build_risk_result(score: float, breakdown: dict[str, float]) -> RiskResult:
-    """Apply the global environment multiplier, cap at 100, then classify the final score."""
+    """Apply the global environment multiplier, cap at 100, then classify the final score.
+
+    Note: This global multiplier is a *deployment-level* tuning knob (e.g. to raise
+    overall alerting sensitivity across the whole SOC). It is applied on top of the
+    per-request `c_env` factor computed inside the AHP strategy, which reflects the
+    specific request's own environment context. The two serve different purposes and
+    are intentionally stacked.
+    """
     multiplier = settings.risk_environment_multiplier
     final_score = round(max(0, min(100, score * multiplier)), 2)
     return RiskResult(
@@ -55,12 +62,12 @@ def calculate_linear(data: RiskInput) -> RiskResult:
     W_A, W_S, W_O, W_T = 0.30, 0.25, 0.20, 0.25
     max_raw = 5*W_A + 5*W_S + 1*W_O + 5*W_T  # Hasil: 4.2
     scale = 100 / max_raw  # FIX: Agar skor maksimal tepat 100
-    
+
     raw = (data.asset.criticality * W_A) + \
           (data.event.severity * W_S) + \
           (data.event.outcome * W_O) + \
           (data.threat.base_weight * W_T)
-    
+
     score = round(raw * scale, 2)
     return build_risk_result(score, {"raw": raw})
 
@@ -72,10 +79,10 @@ def calculate_ahp_2026(data: RiskInput) -> RiskResult:
         BUSINESS_VALUE_SCORES[data.asset.business_value]
         + DATA_SENSITIVITY_SCORES[data.asset.data_sensitivity]
     ) / 2
-    
+
     # 2. Attack Stage Hazard
     c_stage = ATTACK_STAGE_SCORES[data.event.category]
-    
+
     # 3. Intel Match
     intel_score = 0.0
     if data.threat.ioc_match:
@@ -86,24 +93,28 @@ def calculate_ahp_2026(data: RiskInput) -> RiskResult:
     ):
         intel_score += 0.5
     c_intel = intel_score
-    
-    # 4. Feasibility
+
+    # 4. Feasibility (domain age)
+    # FIX: Newly Registered Domains (NRD) are a known high-risk indicator in SOC.
+    # Domain < 30 days  -> high risk (1.0)
+    # Domain 30-180 days -> moderate risk (0.7)
+    # Domain > 180 days  -> established/trusted (0.3)
     feas = 1.0
     if data.threat.domain_age_days is not None:
         if data.threat.domain_age_days < 30:
-            feas = 0.3
+            feas = 1.0
         elif data.threat.domain_age_days < 180:
             feas = 0.7
         else:
-            feas = 1.0
+            feas = 0.3
     c_feas = feas
-    
+
     # 5. Persistence
     c_persist = min(1.0, data.threat.repeat_count / 50.0)
-    
-    # 6. Environment
+
+    # 6. Environment (per-request context; see build_risk_result note above)
     c_env = (
-        data.environment.external_multiplier + 
+        data.environment.external_multiplier +
         data.environment.internal_multiplier
     ) / 2
 
@@ -116,17 +127,24 @@ def calculate_ahp_2026(data: RiskInput) -> RiskResult:
         + (weights["persistence"] * c_persist)
         + (weights["env"] * c_env)
     )
-    
-    score = round(max(0, min(100, rb)), 2)
+
+    # 7. Outcome adjustment
+    # FIX: If the event was blocked (outcome=0), the realized risk is lower.
+    # Reduce the raw AHP score by 30% to reflect successful mitigation.
+    outcome_factor = 1.0 if data.event.outcome == 1 else 0.7
+    adjusted_rb = rb * outcome_factor
+
+    score = round(max(0, min(100, adjusted_rb)), 2)
 
     return build_risk_result(
         score,
         {
-            "target": round(c_target, 3), 
-            "stage": round(c_stage, 3), 
-            "intel": round(c_intel, 3), 
-            "feas": round(c_feas, 3), 
-            "persist": round(c_persist, 3), 
-            "env": round(c_env, 3)
+            "target": round(c_target, 3),
+            "stage": round(c_stage, 3),
+            "intel": round(c_intel, 3),
+            "feas": round(c_feas, 3),
+            "persist": round(c_persist, 3),
+            "env": round(c_env, 3),
+            "outcome_factor": outcome_factor,
         },
     )

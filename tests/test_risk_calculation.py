@@ -50,14 +50,16 @@ class RiskCalculationTests(unittest.TestCase):
 
         self.assertEqual(result.score, 100)
 
-    def test_zero_day_domain_is_treated_as_new_domain(self):
+    def test_zero_day_domain_is_treated_as_high_risk(self):
+        # FIX: Newly registered domains (0 days) are a high-risk indicator in SOC.
+        # Therefore, feasibility score should be 1.0 (high risk), not 0.3.
         payload = RiskInput.model_validate(
             {"threat": {"domain_age_days": 0}, "strategy": "ahp_2026"}
         )
 
         result = calculate_ahp_2026(payload)
 
-        self.assertEqual(result.breakdown["feas"], 0.3)
+        self.assertEqual(result.breakdown["feas"], 1.0)
 
     def test_accepts_categories_emitted_by_log_analyzer(self):
         for category in ("security", "configuration"):
