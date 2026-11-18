@@ -16,7 +16,7 @@ class RiskCalculationTests(unittest.TestCase):
         with patch.object(settings, "risk_strategy", "ahp_2026"):
             result = calculate_risk(payload)
 
-        self.assertEqual(result.breakdown["stage"], 0.5)
+        self.assertEqual(result.breakdown["stage"], 0.367)
 
     def test_request_strategy_overrides_configured_strategy(self):
         payload = RiskInput(strategy="linear")
@@ -33,8 +33,8 @@ class RiskCalculationTests(unittest.TestCase):
         with patch.object(settings, "risk_environment_multiplier", 1.2):
             result = calculate_ahp_2026(payload)
 
-        self.assertEqual(result.score, 62.76)
-        self.assertEqual(result.level, "high")
+        self.assertEqual(result.score, 41.32)
+        self.assertEqual(result.level, "medium")
         self.assertEqual(result.breakdown["global_multiplier"], 1.2)
 
     def test_environment_multiplier_caps_final_score_at_100(self):
@@ -70,7 +70,7 @@ class RiskCalculationTests(unittest.TestCase):
 
                 result = calculate_ahp_2026(payload)
 
-                self.assertEqual(result.breakdown["stage"], 0.5)
+                self.assertEqual(result.breakdown["stage"], 0.367)
 
     def test_rejects_out_of_range_risk_inputs(self):
         with self.assertRaises(ValidationError):
@@ -88,6 +88,13 @@ class RiskCalculationTests(unittest.TestCase):
         result = calculate_ahp_2026(payload)
 
         self.assertEqual(result.breakdown["env"], 1.0)
+
+    def test_unknown_domain_age_is_neutral(self):
+        payload = RiskInput.model_validate({"strategy": "ahp_2026"})
+
+        result = calculate_ahp_2026(payload)
+
+        self.assertEqual(result.breakdown["feas"], 0.5)
 
     def test_linear_breakdown_is_normalized(self):
         payload = RiskInput(

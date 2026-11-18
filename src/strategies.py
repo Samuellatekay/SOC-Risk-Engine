@@ -83,14 +83,20 @@ def calculate_linear(data: RiskInput) -> RiskResult:
 # --- STRATEGY 2: AHP 2026 ---
 def calculate_ahp_2026(data: RiskInput) -> RiskResult:
     """Calculate the weighted AHP score; the global multiplier is applied afterward."""
-    # 1. Target Criticality
+    # 1. Target Criticality (asset business value + data sensitivity + numeric criticality)
     c_target = (
         BUSINESS_VALUE_SCORES[data.asset.business_value]
         + DATA_SENSITIVITY_SCORES[data.asset.data_sensitivity]
-    ) / 2
+        + (data.asset.criticality / 5.0)
+    ) / 3
 
-    # 2. Attack Stage Hazard
-    c_stage = ATTACK_STAGE_SCORES[data.event.category]
+    # 2. Attack Stage Hazard (event category blended with event severity and
+    #    threat base weight so every severity signal influences the score)
+    c_stage = (
+        ATTACK_STAGE_SCORES[data.event.category]
+        + (data.event.severity / 5.0)
+        + (data.threat.base_weight / 5.0)
+    ) / 3
 
     # 3. Intel Match
     intel_score = 0.0
@@ -108,7 +114,8 @@ def calculate_ahp_2026(data: RiskInput) -> RiskResult:
     # Domain < 30 days  -> high risk (1.0)
     # Domain 30-180 days -> moderate risk (0.7)
     # Domain > 180 days  -> established/trusted (0.3)
-    feas = 1.0
+    #    Unknown domain age (None) is treated as NEUTRAL (0.5), not maximum risk.
+    feas = 0.5
     if data.threat.domain_age_days is not None:
         if data.threat.domain_age_days < 30:
             feas = 1.0
@@ -130,7 +137,7 @@ def calculate_ahp_2026(data: RiskInput) -> RiskResult:
                 data.environment.external_multiplier
                 + data.environment.internal_multiplier
             )
-            / 2,
+            / 4.0,
         ),
     )
 
